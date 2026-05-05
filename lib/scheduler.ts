@@ -1,13 +1,8 @@
 import cron from 'node-cron';
-import { readData, writeData, getOfficePDFs } from './store';
-import { sendBiometricsEmail } from './mailer.js';
-import { v4 as uuidv4 } from 'crypto';
+import { readData, writeData, getOfficePDFs, generateId } from './store';
+import { sendBiometricsEmail } from './mailer';
 
 let schedulerStarted = false;
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
-}
 
 export async function sendToAllOffices(): Promise<{
   sent: number;
@@ -17,15 +12,18 @@ export async function sendToAllOffices(): Promise<{
   let sent = 0;
   let failed = 0;
 
+  const template = data.emailTemplate;
+
   for (const office of data.offices) {
     const pdfPaths = getOfficePDFs(office.name);
+    const emailList = office.emails.join(', ');
 
     if (pdfPaths.length === 0) {
       data.logs.unshift({
         id: generateId(),
         officeId: office.id,
         officeName: office.name,
-        email: office.emails,
+        email: emailList,
         sentAt: new Date().toISOString(),
         status: 'failed',
         filesCount: 0,
@@ -37,16 +35,17 @@ export async function sendToAllOffices(): Promise<{
 
     try {
       await sendBiometricsEmail({
-        to: office.email,
+        to: office.emails,
         officeName: office.name,
         pdfPaths,
+        template,
       });
 
       data.logs.unshift({
         id: generateId(),
         officeId: office.id,
         officeName: office.name,
-        email: office.email,
+        email: emailList,
         sentAt: new Date().toISOString(),
         status: 'success',
         filesCount: pdfPaths.length,
@@ -57,7 +56,7 @@ export async function sendToAllOffices(): Promise<{
         id: generateId(),
         officeId: office.id,
         officeName: office.name,
-        email: office.email,
+        email: emailList,
         sentAt: new Date().toISOString(),
         status: 'failed',
         filesCount: pdfPaths.length,
